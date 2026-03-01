@@ -58,7 +58,8 @@ Het script produceert een CSV met de volgende kolommen, zoals verwacht door de H
 
 | Kolom | Type | Beschrijving |
 |---|---|---|
-| `pagina` | integer | Paginanummer in het quizboek |
+| `pagina` | integer | PDF-paginanummer (met eventuele offset) |
+| `bladzijde` | integer of leeg | Gedrukt bladzijdenummer onderaan de pagina |
 | `opdrachtnummer` | integer | Vraagnummer op die pagina |
 | `omschrijving` | tekst | Volledige vraagtekst |
 | `punten` | integer | Aantal punten voor de opdracht |

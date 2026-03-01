@@ -26,6 +26,25 @@ import sys
 from pathlib import Path
 
 
+def extract_bladzijde(page_text: str) -> int | None:
+    """
+    Zoek het gedrukte bladzijdenummer onderaan een PDF-pagina.
+
+    Strategie: scan de laatste ~15 regels van de OCR-tekst op een
+    losse integer (eventueel omgeven door witruimte/leestekens).
+    Geeft het EERSTE gevonden getal terug, of None als niets gevonden.
+    """
+    regels = page_text.rstrip().splitlines()
+    # Bekijk de laatste 15 regels (onderste gedeelte van de pagina)
+    onderste = regels[-15:] if len(regels) > 15 else regels
+    for regel in reversed(onderste):
+        # Zoek naar een losse integer op de regel (geen tekst eromheen)
+        m = re.fullmatch(r'\s*([0-9]{1,4})\s*', regel)
+        if m:
+            return int(m.group(1))
+    return None
+
+
 def extract_tijden(text: str) -> list[str]:
     """Extraheer tijden uit tekst (bijv. '10:00', '5 minuten')."""
     tijd_pattern = r'\b(\d{1,2}[:\.]\d{2})\b|(\d+)\s*(min(?:uten)?|sec(?:onden)?)\b'
@@ -60,6 +79,8 @@ def parse_ocr_text(ocr_text: str, eerste_pagina_leeg: bool = False) -> list[dict
 
         matches = list(re.finditer(vraag_pattern, page_text, re.IGNORECASE))
 
+        bladzijde = extract_bladzijde(page_text)
+
         for idx, match in enumerate(matches):
             vraag_num = int(match.group(1))
             punten = int(match.group(2))
@@ -74,6 +95,7 @@ def parse_ocr_text(ocr_text: str, eerste_pagina_leeg: bool = False) -> list[dict
 
             opdrachten.append({
                 'pagina': page_num,
+                'bladzijde': bladzijde,
                 'opdrachtnummer': vraag_num,
                 'omschrijving': vraag_tekst,
                 'punten': punten,
@@ -143,7 +165,7 @@ def pdf_to_ocr_text(
 
 def schrijf_csv(opdrachten: list[dict], output_path: Path) -> None:
     """Schrijf de opdrachtenlijst naar een CSV bestand."""
-    velden = ['pagina', 'opdrachtnummer', 'omschrijving', 'punten',
+    velden = ['pagina', 'bladzijde', 'opdrachtnummer', 'omschrijving', 'punten',
               'is_teamcaptain', 'is_teamnummer', 'is_tijdopdracht']
 
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
