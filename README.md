@@ -22,6 +22,13 @@ pip install -r requirements.txt
 
 ## Gebruik
 
+Activeer eerst de venv (eenmalig per terminalsessie):
+```bash
+cd /pad/naar/de_hertjes_pdf_to_csv_tool
+source venv/bin/activate
+```
+
+Daarna het script starten:
 ```bash
 python pdf_to_csv.py mijn_quizboek.pdf
 ```
