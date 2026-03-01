@@ -26,22 +26,42 @@ import sys
 from pathlib import Path
 
 
-def extract_bladzijde(page_text: str) -> int | None:
+def ocr_bladzijde_uit_strip(image) -> int | None:
     """
-    Zoek het gedrukte bladzijdenummer onderaan een PDF-pagina.
+    Extraheer het gedrukte bladzijdenummer uit de onderste strip van een pagina-afbeelding.
 
-    Strategie: scan de laatste ~15 regels van de OCR-tekst op een
-    losse integer (eventueel omgeven door witruimte/leestekens).
-    Geeft het EERSTE gevonden getal terug, of None als niets gevonden.
+    Aanpak:
+    - Knip de onderste 8% van de pagina uit
+    - Converteer naar grijswaarden
+    - Inverteer (wit-op-zwart → zwart-op-wit voor Tesseract)
+    - Vergroot 3× voor betere OCR nauwkeurigheid
+    - Gebruik Tesseract met alleen cijfers toegestaan
     """
-    regels = page_text.rstrip().splitlines()
-    # Bekijk de laatste 15 regels (onderste gedeelte van de pagina)
-    onderste = regels[-15:] if len(regels) > 15 else regels
-    for regel in reversed(onderste):
-        # Zoek naar een losse integer op de regel (geen tekst eromheen)
-        m = re.fullmatch(r'\s*([0-9]{1,4})\s*', regel)
-        if m:
-            return int(m.group(1))
+    try:
+        import pytesseract
+        from PIL import Image, ImageOps
+    except ImportError:
+        return None
+
+    breedte, hoogte = image.size
+    strip_hoogte = int(hoogte * 0.08)  # onderste 8%
+    strip = image.crop((0, hoogte - strip_hoogte, breedte, hoogte))
+
+    # Grijswaarden + inverteren
+    strip_grijs = strip.convert('L')
+    strip_inv = ImageOps.invert(strip_grijs)
+
+    # Vergroot 3× voor betere leesbaarheid kleine tekst
+    nieuw_w = strip_inv.width * 3
+    nieuw_h = strip_inv.height * 3
+    strip_groot = strip_inv.resize((nieuw_w, nieuw_h), Image.LANCZOS)
+
+    # OCR: enkel cijfers, single-line modus
+    config = '--psm 7 -c tessedit_char_whitelist=0123456789'
+    tekst = pytesseract.image_to_string(strip_groot, config=config).strip()
+
+    if tekst.isdigit():
+        return int(tekst)
     return None
 
 
@@ -79,7 +99,12 @@ def parse_ocr_text(ocr_text: str, eerste_pagina_leeg: bool = False) -> list[dict
 
         matches = list(re.finditer(vraag_pattern, page_text, re.IGNORECASE))
 
-        bladzijde = extract_bladzijde(page_text)
+        # Haal bladzijde op uit de marker die tijdens image-OCR is ingeschreven
+        bladzijde_match = re.search(r'=== BLADZIJDE (\d*) ===', page_text)
+        if bladzijde_match and bladzijde_match.group(1):
+            bladzijde = int(bladzijde_match.group(1))
+        else:
+            bladzijde = None
 
         for idx, match in enumerate(matches):
             vraag_num = int(match.group(1))
@@ -157,7 +182,9 @@ def pdf_to_ocr_text(
             print(f"  {msg}", end='\r')
 
         text = pytesseract.image_to_string(image, lang=taal, config='--psm 6')
-        full_text.append(f"\n=== PAGINA {i}/{total} ===\n{text}")
+        bladzijde = ocr_bladzijde_uit_strip(image)
+        bladzijde_marker = str(bladzijde) if bladzijde is not None else ''
+        full_text.append(f"\n=== PAGINA {i}/{total} ===\n=== BLADZIJDE {bladzijde_marker} ===\n{text}")
 
     log(f"OCR klaar: {total} pagina's verwerkt.")
     return ''.join(full_text)
