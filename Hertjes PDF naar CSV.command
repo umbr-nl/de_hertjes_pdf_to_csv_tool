@@ -18,8 +18,10 @@ if [[ -z "$PDF" ]]; then
   exit 0
 fi
 
+OUTPUT="$(dirname "$PDF")/$(basename "$PDF" .pdf).csv"
+
 echo "PDF:    $PDF"
-echo "Output: $(dirname "$PDF")/$(basename "$PDF" .pdf).csv"
+echo "Output: $OUTPUT"
 echo ""
 
 # ── Vraag of eerste pagina leeg is ──────────────────────────────────── #
@@ -38,7 +40,7 @@ echo "────────────────────────�
 
 # ── Activeer venv en start script ───────────────────────────────────── #
 source "$SCRIPT_DIR/venv/bin/activate"
-python3 "$SCRIPT_DIR/pdf_to_csv.py" "$PDF" $EERSTE_LEEG
+python3 "$SCRIPT_DIR/pdf_to_csv.py" "$PDF" --output "$OUTPUT" $EERSTE_LEEG
 
 EXIT_CODE=$?
 echo "────────────────────────────────────────────"
