@@ -85,29 +85,59 @@ def parse_ocr_text(ocr_text: str, eerste_pagina_leeg: bool = False) -> list[dict
     return opdrachten
 
 
-def pdf_to_ocr_text(pdf_path: Path, dpi: int = 300, taal: str = 'nld+eng') -> str:
-    """Converteer een PDF naar OCR-tekst via pdf2image + pytesseract."""
+def pdf_to_ocr_text(
+    pdf_path: Path,
+    dpi: int = 300,
+    taal: str = 'nld+eng',
+    progress_callback=None,
+    cancel_event=None,
+) -> str | None:
+    """
+    Converteer een PDF naar OCR-tekst via pdf2image + pytesseract.
+
+    Args:
+        progress_callback: optioneel callable(message: str, percentage: float)
+        cancel_event:      optioneel threading.Event; als set() wordt gezet, stopt de OCR.
+
+    Returns:
+        De volledige OCR-tekst, of None als geannuleerd.
+    """
+    def log(msg):
+        if progress_callback:
+            progress_callback(msg, None)
+        else:
+            print(msg)
+
     try:
         import pytesseract
         from pdf2image import convert_from_path
     except ImportError as e:
-        print(f"Fout: vereiste library niet gevonden: {e}")
-        print("Installeer met: pip install -r requirements.txt")
+        log(f"Fout: vereiste library niet gevonden: {e}")
+        log("Installeer met: pip install -r requirements.txt")
         sys.exit(1)
 
-    print(f"PDF laden: {pdf_path}")
+    log(f"PDF laden: {pdf_path}")
     images = convert_from_path(str(pdf_path), dpi=dpi)
     total = len(images)
-    print(f"{total} pagina's gevonden, OCR starten...")
+    log(f"{total} pagina's gevonden, OCR starten...")
 
     full_text = []
 
     for i, image in enumerate(images, start=1):
-        print(f"  Pagina {i}/{total}...", end='\r')
+        if cancel_event and cancel_event.is_set():
+            return None
+
+        msg = f"Pagina {i}/{total} scannen..."
+        pct = (i - 1) / total * 90  # 0–90% voor OCR, rest voor parsen/schrijven
+        if progress_callback:
+            progress_callback(msg, pct)
+        else:
+            print(f"  {msg}", end='\r')
+
         text = pytesseract.image_to_string(image, lang=taal, config='--psm 6')
         full_text.append(f"\n=== PAGINA {i}/{total} ===\n{text}")
 
-    print(f"\nOCR klaar: {total} pagina's verwerkt.")
+    log(f"OCR klaar: {total} pagina's verwerkt.")
     return ''.join(full_text)
 
 
@@ -146,6 +176,10 @@ def main():
 
     # Stap 1: OCR
     ocr_text = pdf_to_ocr_text(args.pdf, dpi=args.dpi, taal=args.taal)
+
+    if ocr_text is None:
+        print("Geannuleerd.")
+        sys.exit(0)
 
     # Stap 2: Parsen
     opdrachten = parse_ocr_text(ocr_text, eerste_pagina_leeg=args.eerste_pagina_leeg)

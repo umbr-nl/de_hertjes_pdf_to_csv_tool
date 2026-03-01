@@ -28,7 +28,22 @@ cd /pad/naar/de_hertjes_pdf_to_csv_tool
 source venv/bin/activate
 ```
 
-Daarna het script starten:
+### Grafische interface (aanbevolen)
+
+```bash
+python3 app.py
+```
+
+Er opent een venster waar je:
+- een PDF selecteert via de **Bladeren…** knop
+- de output map instelt (standaard dezelfde map als de PDF)
+- eventueel opties aanpast (eerste pagina leeg, DPI)
+- op **Maak CSV** klikt om te starten
+
+De voortgang per pagina is live zichtbaar in het statusvenster.
+
+### Command-line
+
 ```bash
 python3 pdf_to_csv.py mijn_quizboek.pdf
 ```
