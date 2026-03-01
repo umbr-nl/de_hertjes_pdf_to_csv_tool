@@ -18,7 +18,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Hertjes PDF → CSV")
-        self.geometry("680x560")
+        self.geometry("680x480")
         self.resizable(True, True)
         self.minsize(540, 480)
 
@@ -34,7 +34,7 @@ class App(tk.Tk):
 
     def _build_ui(self):
         self.columnconfigure(1, weight=1)
-        self.rowconfigure(5, weight=1)  # log groeit mee
+        self.rowconfigure(4, weight=1)  # log groeit mee
 
         pad = {"padx": 12, "pady": 6}
 
@@ -50,21 +50,9 @@ class App(tk.Tk):
             row=0, column=2, **pad
         )
 
-        # ── Output map ───────────────────────────────────────────────── #
-        tk.Label(self, text="Output map:", anchor="w").grid(
-            row=1, column=0, sticky="w", **pad
-        )
-        self.output_var = tk.StringVar(value=str(Path.home() / "Downloads"))
-        tk.Entry(self, textvariable=self.output_var).grid(
-            row=1, column=1, sticky="ew", **pad
-        )
-        tk.Button(self, text="Bladeren…", command=self._browse_output).grid(
-            row=1, column=2, **pad
-        )
-
         # ── Opties ───────────────────────────────────────────────────── #
         opts = tk.LabelFrame(self, text="Opties", padx=8, pady=6)
-        opts.grid(row=2, column=0, columnspan=3, sticky="ew", padx=12, pady=4)
+        opts.grid(row=1, column=0, columnspan=3, sticky="ew", padx=12, pady=4)
 
         self.eerste_leeg_var = tk.BooleanVar()
         tk.Checkbutton(
@@ -81,11 +69,11 @@ class App(tk.Tk):
 
         # ── Voortgangsbalk ────────────────────────────────────────────── #
         self.progress_label = tk.Label(self, text="", anchor="w", fg="#555")
-        self.progress_label.grid(row=3, column=0, columnspan=3, sticky="w", padx=12)
+        self.progress_label.grid(row=2, column=0, columnspan=3, sticky="w", padx=12)
 
         self.progress = ttk.Progressbar(self, mode="determinate", maximum=100)
         self.progress.grid(
-            row=4, column=0, columnspan=3, sticky="ew", padx=12, pady=(0, 4)
+            row=3, column=0, columnspan=3, sticky="ew", padx=12, pady=(0, 4)
         )
 
         # ── Status log ───────────────────────────────────────────────── #
@@ -95,7 +83,7 @@ class App(tk.Tk):
             insertbackground="white",
         )
         self.log.grid(
-            row=5, column=0, columnspan=3, sticky="nsew", padx=12, pady=(0, 6)
+            row=4, column=0, columnspan=3, sticky="nsew", padx=12, pady=(0, 6)
         )
         # kleur-tags
         self.log.tag_config("ok",    foreground="#6dde6d")
@@ -106,7 +94,7 @@ class App(tk.Tk):
 
         # ── Knoppen ──────────────────────────────────────────────────── #
         btn_frame = tk.Frame(self)
-        btn_frame.grid(row=6, column=0, columnspan=3, pady=10)
+        btn_frame.grid(row=5, column=0, columnspan=3, pady=10)
 
         self.maak_btn = tk.Button(
             btn_frame, text="Maak CSV", command=self._start,
@@ -133,14 +121,6 @@ class App(tk.Tk):
         )
         if path:
             self.pdf_var.set(path)
-            # Stel output map automatisch in op map van de PDF
-            pdf_dir = str(Path(path).parent)
-            self.output_var.set(pdf_dir)
-
-    def _browse_output(self):
-        path = filedialog.askdirectory(title="Selecteer output map")
-        if path:
-            self.output_var.set(path)
 
     # ------------------------------------------------------------------ #
     #  Log helpers                                                         #
@@ -167,7 +147,6 @@ class App(tk.Tk):
 
     def _start(self):
         pdf = self.pdf_var.get().strip()
-        output_dir = self.output_var.get().strip()
 
         if not pdf:
             self._log_clear()
@@ -180,7 +159,7 @@ class App(tk.Tk):
             self._log(f"⚠  PDF niet gevonden: {pdf_path}", "warn")
             return
 
-        output_path = Path(output_dir) / (pdf_path.stem + ".csv")
+        output_path = pdf_path.parent / (pdf_path.stem + ".csv")
 
         self._cancel_event.clear()
         self.progress["value"] = 0
