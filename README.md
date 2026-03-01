@@ -15,7 +15,7 @@ brew install tesseract tesseract-lang poppler
 
 ### Python packages
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -30,7 +30,7 @@ source venv/bin/activate
 
 Daarna het script starten:
 ```bash
-python pdf_to_csv.py mijn_quizboek.pdf
+python3 pdf_to_csv.py mijn_quizboek.pdf
 ```
 
 ### Opties
@@ -46,10 +46,10 @@ python pdf_to_csv.py mijn_quizboek.pdf
 
 ```bash
 # Standaard gebruik
-python pdf_to_csv.py quizboek_2026.pdf
+python3 pdf_to_csv.py quizboek_2026.pdf
 
 # Eerste pagina is leeg, hogere kwaliteit, eigen bestandsnaam
-python pdf_to_csv.py quizboek_2026.pdf --eerste-pagina-leeg --dpi 400 --output import_2026.csv
+python3 pdf_to_csv.py quizboek_2026.pdf --eerste-pagina-leeg --dpi 400 --output import_2026.csv
 ```
 
 ## CSV formaat
