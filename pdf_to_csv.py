@@ -10,6 +10,7 @@ Gebruik:
 Opties:
     --output BESTAND    Pad naar het output CSV bestand (default: output.csv)
     --eerste-pagina-leeg  Eerste PDF-pagina is leeg (offset paginanummers met 1)
+    --start-pagina GETAL  Eerste paginanummer in de CSV (default: 1)
     --dpi GETAL         DPI voor OCR scan (default: 300)
     --taal TAAL         Tesseract taalcode (default: nld+eng)
 
@@ -26,45 +27,6 @@ import sys
 from pathlib import Path
 
 
-def ocr_bladzijde_uit_strip(image) -> int | None:
-    """
-    Extraheer het gedrukte bladzijdenummer uit de onderste strip van een pagina-afbeelding.
-
-    Aanpak:
-    - Knip de onderste 8% van de pagina uit
-    - Converteer naar grijswaarden
-    - Inverteer (wit-op-zwart → zwart-op-wit voor Tesseract)
-    - Vergroot 3× voor betere OCR nauwkeurigheid
-    - Gebruik Tesseract met alleen cijfers toegestaan
-    """
-    try:
-        import pytesseract
-        from PIL import Image, ImageOps
-    except ImportError:
-        return None
-
-    breedte, hoogte = image.size
-    strip_hoogte = int(hoogte * 0.08)  # onderste 8%
-    strip = image.crop((0, hoogte - strip_hoogte, breedte, hoogte))
-
-    # Grijswaarden + inverteren
-    strip_grijs = strip.convert('L')
-    strip_inv = ImageOps.invert(strip_grijs)
-
-    # Vergroot 3× voor betere leesbaarheid kleine tekst
-    nieuw_w = strip_inv.width * 3
-    nieuw_h = strip_inv.height * 3
-    strip_groot = strip_inv.resize((nieuw_w, nieuw_h), Image.LANCZOS)
-
-    # OCR: enkel cijfers, single-line modus
-    config = '--psm 7 -c tessedit_char_whitelist=0123456789'
-    tekst = pytesseract.image_to_string(strip_groot, config=config).strip()
-
-    if tekst.isdigit():
-        return int(tekst)
-    return None
-
-
 def extract_tijden(text: str) -> list[str]:
     """Extraheer tijden uit tekst (bijv. '10:00', '5 minuten')."""
     tijd_pattern = r'\b(\d{1,2}[:\.]\d{2})\b|(\d+)\s*(min(?:uten)?|sec(?:onden)?)\b'
@@ -72,7 +34,7 @@ def extract_tijden(text: str) -> list[str]:
     return [next(g for g in match if g) for match in tijden if any(match)]
 
 
-def parse_ocr_text(ocr_text: str, eerste_pagina_leeg: bool = False) -> list[dict]:
+def parse_ocr_text(ocr_text: str, eerste_pagina_leeg: bool = False, start_pagina: int = 1) -> list[dict]:
     """
     Parseer de OCR-tekst naar een lijst van opdracht-dicts.
 
@@ -80,54 +42,87 @@ def parse_ocr_text(ocr_text: str, eerste_pagina_leeg: bool = False) -> list[dict
         === PAGINA 1/20 ===
     en vraagblokken in de vorm:
         Vraag 3 (2 punten)
+
+    Fallback: pagina's zonder "Vraag X"-patroon worden gecontroleerd op een
+    naamloze vraag: als de EERSTE niet-lege regel op de pagina eindigt op
+    "(X punten)" of "(X punt)", wordt die als onzekere vraag herkend met
+    opdrachtnummer 9001, 9002, … (oplopend over het hele document).
     """
     pages = re.split(r'=== PAGINA (\d+)/\d+ ===', ocr_text)
     offset = 1 if eerste_pagina_leeg else 0
     opdrachten = []
 
+    # Teller voor naamloze fallback-vragen (uniek per document)
+    naamloos_teller = 9000
+
+    # Patroon: "Vraag X (optioneel iets) (Y punten)"
+    vraag_pattern = r'Vraag\s+(\d+)\s*(?:\([^)]*\))?\s*\((\d+)\s*punten?\)'
+    # Fallback: eerste niet-lege regel eindigt op "(Y punten)" of "(Y punt)"
+    naamloos_pattern = r'^(.+?)\s*\((\d+)\s*punten?\)\s*$'
+
     for i in range(1, len(pages), 2):
         raw_page_num = int(pages[i])
-        page_num = raw_page_num - offset
+        page_num = raw_page_num - offset + (start_pagina - 1)
 
         if page_num < 0:
             continue
 
         page_text = pages[i + 1] if i + 1 < len(pages) else ''
 
-        # Patroon: "Vraag X (optioneel iets) (Y punten)"
-        vraag_pattern = r'Vraag\s+(\d+)\s*(?:\([^)]*\))?\s*\((\d+)\s*punten?\)'
-
         matches = list(re.finditer(vraag_pattern, page_text, re.IGNORECASE))
 
-        # Haal bladzijde op uit de marker die tijdens image-OCR is ingeschreven
-        bladzijde_match = re.search(r'=== BLADZIJDE (\d*) ===', page_text)
-        if bladzijde_match and bladzijde_match.group(1):
-            bladzijde = int(bladzijde_match.group(1))
+        if matches:
+            # Normale verwerking: één of meer "Vraag X (Y punten)" blokken
+            for idx, match in enumerate(matches):
+                vraag_num = int(match.group(1))
+                punten = int(match.group(2))
+
+                # Tekst van dit vraagblok: tot de volgende vraag of einde pagina
+                einde = matches[idx + 1].start() if idx + 1 < len(matches) else len(page_text)
+                vraag_tekst = page_text[match.end():einde].strip()
+
+                is_teamcaptain = 'teamcaptain' in vraag_tekst.lower()
+                is_teamnummer = 'teamnummer' in vraag_tekst.lower()
+                is_tijdopdracht = len(extract_tijden(vraag_tekst)) > 0
+
+                opdrachten.append({
+                    'pagina': page_num,
+                    'opdrachtnummer': vraag_num,
+                    'omschrijving': vraag_tekst,
+                    'punten': punten,
+                    'is_teamcaptain': is_teamcaptain,
+                    'is_teamnummer': is_teamnummer,
+                    'is_tijdopdracht': is_tijdopdracht,
+                })
         else:
-            bladzijde = None
+            # Fallback: controleer alleen de eerste niet-lege regel van de pagina
+            eerste_regel = next(
+                (regel.strip() for regel in page_text.splitlines() if regel.strip()),
+                None
+            )
+            if eerste_regel:
+                m = re.match(naamloos_pattern, eerste_regel, re.IGNORECASE)
+                if m:
+                    naamloos_teller += 1
+                    omschrijving_header = m.group(1).strip()
+                    punten = int(m.group(2))
+                    # Rest van de pagina (na de eerste regel) als vraag-tekst
+                    rest = page_text[page_text.index(eerste_regel) + len(eerste_regel):].strip()
+                    vraag_tekst = f"{omschrijving_header}\n{rest}".strip()
 
-        for idx, match in enumerate(matches):
-            vraag_num = int(match.group(1))
-            punten = int(match.group(2))
+                    is_teamcaptain = 'teamcaptain' in vraag_tekst.lower()
+                    is_teamnummer = 'teamnummer' in vraag_tekst.lower()
+                    is_tijdopdracht = len(extract_tijden(vraag_tekst)) > 0
 
-            # Tekst van dit vraagblok: tot de volgende vraag of einde pagina
-            einde = matches[idx + 1].start() if idx + 1 < len(matches) else len(page_text)
-            vraag_tekst = page_text[match.end():einde].strip()
-
-            is_teamcaptain = 'teamcaptain' in vraag_tekst.lower()
-            is_teamnummer = 'teamnummer' in vraag_tekst.lower()
-            is_tijdopdracht = len(extract_tijden(vraag_tekst)) > 0
-
-            opdrachten.append({
-                'pagina': page_num,
-                'bladzijde': bladzijde,
-                'opdrachtnummer': vraag_num,
-                'omschrijving': vraag_tekst,
-                'punten': punten,
-                'is_teamcaptain': is_teamcaptain,
-                'is_teamnummer': is_teamnummer,
-                'is_tijdopdracht': is_tijdopdracht,
-            })
+                    opdrachten.append({
+                        'pagina': page_num,
+                        'opdrachtnummer': naamloos_teller,
+                        'omschrijving': vraag_tekst,
+                        'punten': punten,
+                        'is_teamcaptain': is_teamcaptain,
+                        'is_teamnummer': is_teamnummer,
+                        'is_tijdopdracht': is_tijdopdracht,
+                    })
 
     return opdrachten
 
@@ -182,9 +177,7 @@ def pdf_to_ocr_text(
             print(f"  {msg}", end='\r')
 
         text = pytesseract.image_to_string(image, lang=taal, config='--psm 6')
-        bladzijde = ocr_bladzijde_uit_strip(image)
-        bladzijde_marker = str(bladzijde) if bladzijde is not None else ''
-        full_text.append(f"\n=== PAGINA {i}/{total} ===\n=== BLADZIJDE {bladzijde_marker} ===\n{text}")
+        full_text.append(f"\n=== PAGINA {i}/{total} ===\n{text}")
 
     log(f"OCR klaar: {total} pagina's verwerkt.")
     return ''.join(full_text)
@@ -192,7 +185,7 @@ def pdf_to_ocr_text(
 
 def schrijf_csv(opdrachten: list[dict], output_path: Path) -> None:
     """Schrijf de opdrachtenlijst naar een CSV bestand."""
-    velden = ['pagina', 'bladzijde', 'opdrachtnummer', 'omschrijving', 'punten',
+    velden = ['pagina', 'opdrachtnummer', 'omschrijving', 'punten',
               'is_teamcaptain', 'is_teamnummer', 'is_tijdopdracht']
 
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
@@ -212,6 +205,8 @@ def main():
                         help='Pad naar het output CSV bestand (default: output.csv)')
     parser.add_argument('--eerste-pagina-leeg', action='store_true',
                         help='Eerste PDF-pagina is leeg, verschuif paginanummers met 1')
+    parser.add_argument('--start-pagina', type=int, default=1,
+                        help='Eerste paginanummer in de CSV (default: 1)')
     parser.add_argument('--dpi', type=int, default=300,
                         help='DPI voor OCR kwaliteit (default: 300, hoger = beter maar trager)')
     parser.add_argument('--taal', type=str, default='nld+eng',
@@ -231,7 +226,7 @@ def main():
         sys.exit(0)
 
     # Stap 2: Parsen
-    opdrachten = parse_ocr_text(ocr_text, eerste_pagina_leeg=args.eerste_pagina_leeg)
+    opdrachten = parse_ocr_text(ocr_text, eerste_pagina_leeg=args.eerste_pagina_leeg, start_pagina=args.start_pagina)
     print(f"{len(opdrachten)} opdrachten gevonden.")
 
     if not opdrachten:
