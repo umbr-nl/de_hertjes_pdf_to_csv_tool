@@ -52,13 +52,22 @@ if [[ -n "$START_PAGINA" && "$START_PAGINA" != "1" ]]; then
   echo "Optie:  startpagina $START_PAGINA"
 fi
 
+# ── Vraag DPI ───────────────────────────────────────────────────────── #
+DPI=$(osascript -e '
+  text returned of (display dialog "Scan kwaliteit (DPI):\n\n• 300 = standaard (sneller)\n• 600 = hogere kwaliteit (trager)\n• 400 / 500 ook mogelijk" default answer "300" buttons {"OK"} default button "OK")
+')
+if [[ -z "$DPI" || ! "$DPI" =~ ^[0-9]+$ ]]; then
+  DPI=300
+fi
+echo "Optie:  DPI $DPI"
+
 echo ""
 echo "OCR starten… (dit kan enkele minuten duren)"
 echo "────────────────────────────────────────────"
 
 # ── Activeer venv en start script ───────────────────────────────────── #
 source "$SCRIPT_DIR/venv/bin/activate"
-python3 "$SCRIPT_DIR/pdf_to_csv.py" "$PDF" --output "$OUTPUT" $EERSTE_LEEG "${START_PAGINA_ARG[@]}"
+python3 "$SCRIPT_DIR/pdf_to_csv.py" "$PDF" --output "$OUTPUT" --dpi "$DPI" $EERSTE_LEEG "${START_PAGINA_ARG[@]}"
 
 EXIT_CODE=$?
 echo "────────────────────────────────────────────"
