@@ -34,13 +34,23 @@ if [[ "$ANTWOORD" == "Ja" ]]; then
   echo "Optie:  eerste pagina leeg aan"
 fi
 
+# ── Vraag startpaginanummer ──────────────────────────────────────────── #
+START_PAGINA_ARG=()
+START_PAGINA=$(osascript -e '
+  text returned of (display dialog "Wat is het eerste paginanummer in de CSV?\n(Laat leeg of vul 1 in als de PDF vanaf pagina 1 begint.)" default answer "1" buttons {"OK"} default button "OK")
+')
+if [[ -n "$START_PAGINA" && "$START_PAGINA" != "1" ]]; then
+  START_PAGINA_ARG=(--start-pagina "$START_PAGINA")
+  echo "Optie:  startpagina $START_PAGINA"
+fi
+
 echo ""
 echo "OCR starten… (dit kan enkele minuten duren)"
 echo "────────────────────────────────────────────"
 
 # ── Activeer venv en start script ───────────────────────────────────── #
 source "$SCRIPT_DIR/venv/bin/activate"
-python3 "$SCRIPT_DIR/pdf_to_csv.py" "$PDF" --output "$OUTPUT" $EERSTE_LEEG
+python3 "$SCRIPT_DIR/pdf_to_csv.py" "$PDF" --output "$OUTPUT" $EERSTE_LEEG "${START_PAGINA_ARG[@]}"
 
 EXIT_CODE=$?
 echo "────────────────────────────────────────────"
