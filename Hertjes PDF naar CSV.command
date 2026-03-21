@@ -18,7 +18,15 @@ if [[ -z "$PDF" ]]; then
   exit 0
 fi
 
-OUTPUT="$(dirname "$PDF")/$(basename "$PDF" .pdf).csv"
+BASE_OUTPUT="$(dirname "$PDF")/$(basename "$PDF" .pdf)"
+OUTPUT="${BASE_OUTPUT}.csv"
+if [[ -f "$OUTPUT" ]]; then
+  COUNTER=2
+  while [[ -f "${BASE_OUTPUT}_${COUNTER}.csv" ]]; do
+    (( COUNTER++ ))
+  done
+  OUTPUT="${BASE_OUTPUT}_${COUNTER}.csv"
+fi
 
 echo "PDF:    $PDF"
 echo "Output: $OUTPUT"
